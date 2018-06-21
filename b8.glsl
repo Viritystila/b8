@@ -8,7 +8,7 @@ uniform float outt;
 
 void main(void){
   vec2 uv = (gl_FragCoord.xy / iResolution.xy);
-  uv.y=1.0-uv.y;
+  uv.y=1.0-uv.y*iDataArray[0]*100;
 
   vec4 t0 = texture2D(iChannel0,uv);
 
@@ -25,6 +25,6 @@ void main(void){
   vec4 v2= texture2D(iVideo2, uv);
   vec4 v3= texture2D(iVideo3, uv);
 
-  gl_FragColor = c0;
+  gl_FragColor = v2;
 
 }
