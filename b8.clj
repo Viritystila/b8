@@ -4,14 +4,15 @@
 (do
   (ctl-global-clock 5)
 
-  (ctl time/root-s :rate 20.)
+  (ctl time/root-s :rate 10.)
 
   (defsynth data-probes [timing-signal-bus 0]
     (let [beat-count (in:kr timing-signal-bus)
           _ (tap "global-beat-count" 60 (a2k beat-count))]
       (out 0 0)))
-  (def active-data-probes (data-probes (:count time/beat-1th)))
-
+  (defonce active-data-probes (data-probes (:count time/beat-1th)))
+  (defonce active-data-probe-atom (atom {:synth active-data-probes :tap "global-beat-count"}))
+  (defonce active-data-probe-tap (get-in (:synth @active-data-probe-atom) [:taps (:tap @active-data-probe-atom)]))
   )
 
 
@@ -31,10 +32,73 @@
 
   (control-bus-set! my-bus0 10101))
 
+(do
+  (defonce root-trg-bus (control-bus)) ;; global metronome pulse
+  (defonce root-cnt-bus (control-bus)) ;; global metronome count
+  (defonce beat-trg-bus (control-bus)) ;; beat pulse (fraction of root)
+  (defonce beat-cnt-bus (control-bus))) ;; beat count
+
+(def BEAT-FRACTION "Number of global pulses per beat" 30)
 
 
-;Buffers
-;Kick drum buffer
+                                        ;Control synths
+(do
+  (defsynth root-trg [rate 100]
+    (out:kr root-trg-bus (impulse:kr rate)))
+
+  (defsynth root-cnt []
+    (out:kr root-cnt-bus (pulse-count:kr (in:kr root-trg-bus))))
+
+  (defsynth beat-trg [div BEAT-FRACTION]
+    (out:kr beat-trg-bus (pulse-divider (in:kr root-trg-bus) div)))
+
+  (defsynth beat-cnt []
+    (out:kr beat-cnt-bus (pulse-count (in:kr beat-trg-bus)))))
+
+(do
+  (def r-trg (root-trg))
+  (def r-cnt (root-cnt [:after r-trg]))
+  (def b-trg (beat-trg [:after r-trg]))
+  (def b-cnt (beat-cnt [:after b-trg])))
+
+(ctl r-trg :rate 10)
+
+
+                                        ;Buffers
+(do
+  (defonce buf-0 (buffer 8))
+  (defonce buf-1 (buffer 8))
+  (defonce buf-2 (buffer 8))
+  (defonce buf-3 (buffer 8)))
+
+
+
+
+                                        ;overpad buffer
+(do (defonce overpad-buffer (buffer 256))
+    (pattern! overpad-buffer [0 1 0 0 0 0 0 1 0])
+    (defsynth overpad-data-probe [overpad-buffer 0 timing-signal-bus 0]
+      (let [beat-count (in:kr timing-signal-bus)
+            overpad-beat (buf-rd:kr 1 overpad-buffer beat-count)
+            _ (tap "overpad-beat" 60 (a2k overpad-beat))]
+        (out 0 0)))
+    (defonce overpad-data-probef (overpad-data-probe overpad-buffer (:count time/beat-1th)))
+    (def overpad-atom (atom {:synth overpad-data-probef :tap "overpad-beat"}))
+    (def overpad-tap (get-in (:synth @overpad-atom) [:taps (:tap @overpad-atom)])))
+
+
+(def ob1 [1 0 1 0 1 0 0 0])
+
+(def ob2 [1 0 1 0 1 0 1 0])
+
+(def ob3 [0 1 0 1 0 0 1 0])
+
+
+(pattern! overpad-buffer ob2)
+
+
+                                        ;Kick drum buffer
+
 (do
   (defonce kick-drum-buffer (buffer 256))
   (pattern! kick-drum-buffer [1 0 0 0 0 1 0 1 1 0 1 0])
@@ -49,10 +113,24 @@
   (def kick-drum-tap (get-in (:synth @kick-drum-atom) [:taps (:tap @kick-drum-atom)]))
   )
 
-(pattern! kick-drum-buffer [1 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 1  0 0 0 0 0 0 0 1 0 0 0 0 0 0 0])
+
+(def kdb1 [1 0 0 0 0 0 0 0
+           1 0 0 0 0 0 0 0
+           1 0 0 0 0 0 0 0
+           1 0 0 0 0 0 0 0
+           1 0 0 0 0 0 0 0
+           1 0 0 0 0 0 0 0
+           1 0 0 0 0 0 0 0
+           1 0 0 0 0 0 0 0])
+
+(def kdb2 [1 0 0 0 0 0 0 0
+           1 0 1 0 1 0 1 0])
+
+(def kdb3 [1 0 1 0 0 1 0 1])
+
+(pattern! kick-drum-buffer kdb1)
 
                                         ;Synths
-
 (defsynth dualPulse [note 22 amp 1 attack 0.1 decay 0.1 sustain 0.2 release 1]
   (let [;freq (* 0.02 (sin-osc 100) (saw note))
         sp1 (sin-osc note)
@@ -62,6 +140,20 @@
     (out 0 (pan2 (* amp 0.25 (* sp1 sp2 src2)) ))))
 
 (def dualPulsef (dualPulse :amp 0.1))
+
+
+
+(defsynth noisInput [freq 44 amp 1  fraction BEAT-FRACTION]
+  (let [src1 (sin-osc freq)
+        tr_in (pulse-divider (in:kr root-trg-bus) fraction)
+        src2 (* src1 tr_in amp)]
+    (out 0 (pan2 src2))))
+
+(def noisInputf (noisInput))
+
+(ctl noisInputf :fraction 2)
+
+(kill noisInputf)
 
 
 (defsynth noise [freq 44 amp 1 freq2 44]
@@ -74,6 +166,10 @@
 (def noisef (noise :freq2 my-bus0))
 
 (ctl noisef :amp 0.01)
+
+
+(kill noisef)
+
 
 (defsynth overpad [note 60 amp 0.7 attack 0.001 release 2]
   (let [freq (midicps note)
@@ -101,6 +197,13 @@
 (kill ibs)
 
 
+
+                                        ;Sequencer
+
+
+
+
+
                                         ;Video
                                         ;Histogram
 
@@ -117,16 +220,27 @@
 
 
                                         ;Watch
+
+
+
+(add-watch overpad-tap :overpad-beat
+           (fn [_ _ old new]
+             (when (and (= old 0.0) (= new 1.0))
+               (overpad 30 :attack 0.01 :release 0.1))))
+
+(remove-watch overpad-tap :overpad-beat)
+
 (add-watch kick-drum-tap :kick-drum-beat
            (fn [_ _ old new]
              (when (and (= old 0.0) (= 1.0 new))
                (dualPulse :amp 0.5)
-               (t/set-dataArray-item 1 new)
+               (t/set-dataArray-item 1 (* new 10))
                ;(overpad :attack 4.1 :release 0.2)
 
 )))
 
+
 (add-watch v1rh :v1rh (fn [_ _ old new]
                          ;(println (nth new 100))
-                         (t/set-dataArray-item 0 (nth new 100))
+                         (t/set-dataArray-item 0 (nth new 20))
                         ))
