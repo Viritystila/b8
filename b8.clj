@@ -163,28 +163,31 @@
 
 (buffer-write! buf 0 (map #(+ 12 %) [10 20 10 20 10 20 10 20]))
 
-(defsynth noisInput [ amp 0.1  fraction BEAT-FRACTION in-bus 0 dec 0.1]
+(defsynth noisInput [ amp 0.1  fraction BEAT-FRACTION in-bus 0 dec 0.1 attack 0.1 release 0.1]
   (let [src1 (in in-bus)
         tr_in (pulse-divider (in:kr root-trg-bus) fraction)
         indexes (dseq (range 8) INF)
         freqs (dbufrd buf indexes)
         note-gen (demand:kr tr_in 0 freqs)
+        env (env-gen (perc attack release) :gate tr_in)
         sawsrc (saw note-gen)
         src2 (+ src1 (decay sawsrc dec) amp)]
-    (out 0 (pan2 (* src2 amp)))))
+    (out 0 (pan2 (* src2 amp env)))))
 
 (def noisInputf (noisInput 1 BEAT-FRACTION my-audio-bus0))
 
 (buffer-set! buf 5 100)
 
-(ctl noisInputf :fraction 1)
 
-(ctl noisInputf :dec 0.1)
+(ctl noisInputf :fraction 2)
+
+(ctl noisInputf :dec 0.1 :release 0.1 :attack 0.2)
 
 (ctl noisInputf :amp 0.01)
 
 (kill noisInputf)
 
+(stop)
 
 (defsynth noise [freq 44 amp 1 freq2 44]
   (let [noiseV (pink-noise)
