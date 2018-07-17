@@ -1,75 +1,84 @@
 (ns b8 (:use [overtone.live][mud.core][mud.chords]) (:require [shadertone.tone :as t] [mud.timing :as time]))
 
-
 (do
-  (ctl-global-clock 5)
+  (do
+    (ctl-global-clock 5)
 
-  (ctl time/root-s :rate 10.)
+    (ctl time/root-s :rate 10.)
 
-  (defsynth data-probes [timing-signal-bus 0]
-    (let [beat-count (in:kr timing-signal-bus)
-          _ (tap "global-beat-count" 60 (a2k beat-count))]
-      (out 0 0)))
-  (defonce active-data-probes (data-probes (:count time/beat-1th)))
-  (defonce active-data-probe-atom (atom {:synth active-data-probes :tap "global-beat-count"}))
-  (defonce active-data-probe-tap (get-in (:synth @active-data-probe-atom) [:taps (:tap @active-data-probe-atom)]))
-  )
+    (defsynth data-probes [timing-signal-bus 0]
+      (let [beat-count (in:kr timing-signal-bus)
+            _ (tap "global-beat-count" 60 (a2k beat-count))]
+        (out 0 0)))
+    (defonce active-data-probes (data-probes (:count time/beat-1th)))
+    (defonce active-data-probe-atom (atom {:synth active-data-probes :tap "global-beat-count"}))
+    (defonce active-data-probe-tap (get-in (:synth @active-data-probe-atom) [:taps (:tap @active-data-probe-atom)]))
+    )
 
 
                                         ;Buses
                                         ;Control
-(do
-  (defonce my-bus0 (control-bus 1))
-  (defonce my-bus1 (control-bus 1))
-  (defonce my-bus2 (control-bus 1))
-  (defonce my-bus3 (control-bus 1))
-  (defonce my-bus4 (control-bus 1))
-  (defonce my-bus5 (control-bus 1))
-  (defonce my-bus6 (control-bus 1))
-  (defonce my-bus7 (control-bus 1))
-  (defonce my-bus8 (control-bus 1))
-  (defonce my-bus9 (control-bus 1))
+  (do
+    (defonce my-bus0 (control-bus 1))
+    (defonce my-bus1 (control-bus 1))
+    (defonce my-bus2 (control-bus 1))
+    (defonce my-bus3 (control-bus 1))
+    (defonce my-bus4 (control-bus 1))
+    (defonce my-bus5 (control-bus 1))
+    (defonce my-bus6 (control-bus 1))
+    (defonce my-bus7 (control-bus 1))
+    (defonce my-bus8 (control-bus 1))
+    (defonce my-bus9 (control-bus 1))
 
-  (control-bus-set! my-bus0 10101))
+    (control-bus-set! my-bus0 10101)
 
-(do
-  (defonce root-trg-bus (control-bus)) ;; global metronome pulse
-  (defonce root-cnt-bus (control-bus)) ;; global metronome count
-  (defonce beat-trg-bus (control-bus)) ;; beat pulse (fraction of root)
-  (defonce beat-cnt-bus (control-bus))) ;; beat count
+    (do
+      (defonce root-trg-bus (control-bus)) ;; global metronome pulse
+      (defonce root-cnt-bus (control-bus)) ;; global metronome count
+      (defonce beat-trg-bus (control-bus)) ;; beat pulse (fraction of root)
+      (defonce beat-cnt-bus (control-bus))) ;; beat count
 
-(def BEAT-FRACTION "Number of global pulses per beat" 30)
+    (def BEAT-FRACTION "Number of global pulses per beat" 30)
+
+
+                                        ;Audio
+    (do
+      (defonce my-audio-bus0 (audio-bus))
+      (defonce my-audio-bus1 (audio-bus))
+      (defonce my-audio-bus2 (audio-bus))
+      (defonce my-audio-bus3 (audio-bus))
+      )
 
 
                                         ;Control synths
-(do
-  (defsynth root-trg [rate 100]
-    (out:kr root-trg-bus (impulse:kr rate)))
+    (do
+      (defsynth root-trg [rate 100]
+        (out:kr root-trg-bus (impulse:kr rate)))
 
-  (defsynth root-cnt []
-    (out:kr root-cnt-bus (pulse-count:kr (in:kr root-trg-bus))))
+      (defsynth root-cnt []
+        (out:kr root-cnt-bus (pulse-count:kr (in:kr root-trg-bus))))
 
-  (defsynth beat-trg [div BEAT-FRACTION]
-    (out:kr beat-trg-bus (pulse-divider (in:kr root-trg-bus) div)))
+      (defsynth beat-trg [div BEAT-FRACTION]
+        (out:kr beat-trg-bus (pulse-divider (in:kr root-trg-bus) div)))
 
-  (defsynth beat-cnt []
-    (out:kr beat-cnt-bus (pulse-count (in:kr beat-trg-bus)))))
+      (defsynth beat-cnt []
+        (out:kr beat-cnt-bus (pulse-count (in:kr beat-trg-bus)))))
 
-(do
-  (def r-trg (root-trg))
-  (def r-cnt (root-cnt [:after r-trg]))
-  (def b-trg (beat-trg [:after r-trg]))
-  (def b-cnt (beat-cnt [:after b-trg])))
+    (do
+      (def r-trg (root-trg))
+      (def r-cnt (root-cnt [:after r-trg]))
+      (def b-trg (beat-trg [:after r-trg]))
+      (def b-cnt (beat-cnt [:after b-trg])))
 
-(ctl r-trg :rate 10)
+    (ctl r-trg :rate 10))
 
 
                                         ;Buffers
-(do
-  (defonce buf-0 (buffer 8))
-  (defonce buf-1 (buffer 8))
-  (defonce buf-2 (buffer 8))
-  (defonce buf-3 (buffer 8)))
+  (do
+    (defonce buf-0 (buffer 8))
+    (defonce buf-1 (buffer 8))
+    (defonce buf-2 (buffer 8))
+    (defonce buf-3 (buffer 8))))
 
 
 
@@ -141,17 +150,38 @@
 
 (def dualPulsef (dualPulse :amp 0.1))
 
+(defsynth sin-generator [freq 50 phase 0 out-bus 0]
+  (out out-bus (sin-osc freq phase out-bus)))
 
+(def sin-generatorf (sin-generator 50 0 my-audio-bus0))
 
-(defsynth noisInput [freq 44 amp 1  fraction BEAT-FRACTION]
-  (let [src1 (sin-osc freq)
+(ctl sin-generatorf :freq 50 :phase (* Math/PI 2))
+
+(kill sin-generatorf)
+
+(def buf (buffer 8))
+
+(buffer-write! buf 0 (map #(+ 12 %) [10 20 10 20 10 20 10 20]))
+
+(defsynth noisInput [ amp 0.1  fraction BEAT-FRACTION in-bus 0 dec 0.1]
+  (let [src1 (in in-bus)
         tr_in (pulse-divider (in:kr root-trg-bus) fraction)
-        src2 (* src1 tr_in amp)]
-    (out 0 (pan2 src2))))
+        indexes (dseq (range 8) INF)
+        freqs (dbufrd buf indexes)
+        note-gen (demand:kr tr_in 0 freqs)
+        sawsrc (saw note-gen)
+        src2 (+ src1 (decay sawsrc dec) amp)]
+    (out 0 (pan2 (* src2 amp)))))
 
-(def noisInputf (noisInput))
+(def noisInputf (noisInput 1 BEAT-FRACTION my-audio-bus0))
 
-(ctl noisInputf :fraction 2)
+(buffer-set! buf 5 100)
+
+(ctl noisInputf :fraction 1)
+
+(ctl noisInputf :dec 0.1)
+
+(ctl noisInputf :amp 0.01)
 
 (kill noisInputf)
 
